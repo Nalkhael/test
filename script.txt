@@ -1,0 +1,51 @@
+﻿Import-Module ActiveDirectory 
+ 
+$Servers = @("rdsrv1","rdsrv2","rdsrv3","ardsrv1","ardsrv2","ardsrv4","brdsrv1","brdsrv2","brdsrv3","brdsrv4")
+$UsersToExclude = "",""
+ 
+Function Get-Registry([string]$MachineName = ".", [string]$SearchForUser, [string[]]$UsersToExclude){
+	if($UsersToExclude -notcontains $SearchForUser){
+		$Reg = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $MachineName) 
+		$RegKey= $Reg.OpenSubKey("$UsersProfileKey") 
+	
+		$ADUser = Get-ADUSER $SearchForUser 
+		Write-Host $ADUser.Name "SID is" $ADuser.SID
+		$UserSID = $ADuser.SID
+
+		#Do check you opened the key by checking its name 
+		If ($RegKey.Name -eq "HKEY_LOCAL_MACHINE\$UsersProfileKey"){ 
+			Write-Host "$MachineName - CAUTION going to execute ::- $Reg.DeleteSubKeyTree($UsersProfileKey)" 
+			$Reg.DeleteSubKeyTree("$UsersProfileKey") 
+			Write-Host "$MachineName - CAUTION going to execute ::  &rmdir \\$MachineName\c$\users\$SearchForUser /S /Q" 
+			Test-Path \\$MachineName\c$\users\$SearchForUser 
+			$command = " /c rmdir \\$MachineName\c$\users\$SearchForUser /S /Q" 
+			[Diagnostics.Process]::Start('cmd',"$command") 
+		 
+		}
+	}
+	else{ write-host "User to exclude : $SearchForUser" }
+} 
+ 
+Function Ping-Test(){ 
+Param($TestHost = ".") 
+    $Ping = Test-Connection $TestHost -count 1 -quiet 
+ 
+    If(!$Ping){ 
+		Write-Host $TestHost "is missing" (Get-Date) -ForegroundColor Red #-BackgroundColor White 
+    } 
+ 
+    If($Ping){ 
+		Write-Host $TestHost "is there" (Get-Date) -ForegroundColor Green #-BackgroundColor White 
+		$UsersFolder = Get-ChildItem "\\$MachineName\c$\users\"
+		ForEach($Folder in $UsersFolder){
+			$FullName = Get-Item $Folder.FullName
+			$Size = Get-ChildItem $FullName -Recurse | Measure-Object -Property Length -Sum -ErrorAction Stop).Sum / 1MB
+			if($Size -ge 200){
+				Write-Host "Folder : $fullname | Size : $Size"
+				Get-Registry -MachineName $Server -SearchForUser $Folder.Name
+			}
+		}
+    } 
+}  
+
+ForEach ($Server in $Servers){ Ping-Test $Server }
