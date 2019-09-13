@@ -1,0 +1,27 @@
+Import-Module ActiveDirectory
+
+$UsersToExclude = "",""
+
+$Key = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"
+$Sub = Get-ChildItem $Key
+
+ForEach($S in $Sub){
+	$Items = Get-ItemProperty -Path $S.PSPath
+	$FullPath = $items.ProfileImagePath
+	$SID = $items.Sid
+	
+	$ADUser = Get-ADUser -Identity $SID
+	
+	if($UsersToExclude -notcontains $ADUser){
+		Write-Host $ADUser.Name "| SID " $ADuser.SID
+	
+		$Size = $(Get-ChildItem $FullPath -Recurse | Measure-Object -Property Length -Sum -ErrorAction Stop).Sum / 1MB
+	
+		if($Size -ge 200){
+			Write-Host "Folder : $FullPath | Size : $Size"
+			Remove-Item -Recurse -Force -Path $FullPath
+			Remove-Item $S
+		}
+	}
+	else{ Write-Host "Compte exclu : $($ADUser.Name) | SID $($ADuser.SID)" }
+}
